@@ -1,0 +1,82 @@
+# Este workflow instala dependências Python, executa testes e lint,
+# e faz o deploy para o Heroku após um push para a branch main.
+
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Checkout do código
+      - uses: actions/checkout@v4
+
+      # Configurar Python
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v3
+        with:
+          python-version: "3.10"
+
+      # Instalar dependências
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install flake8 pytest
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+      # Lint com flake8
+      - name: Lint with flake8
+        run: |
+          # Parar o build se houver erros de sintaxe Python ou nomes indefinidos
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+          # Treat all errors as warnings e ajustar a largura das linhas
+          flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+
+      # Testar com pytest
+      - name: Test with pytest
+        run: |
+          pytest
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    steps:
+      # Checkout do código
+      - uses: actions/checkout@v4
+
+      # Configurar Python
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v3
+        with:
+          python-version: "3.10"
+
+      # Instalar dependências
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      # Login no Heroku
+      - name: Login to Heroku
+        uses: akhileshns/heroku-deploy@v3.12.12
+        with:
+          heroku_api_key: ${{ secrets.HEROKU_API_KEY }}
+          heroku_app_name: ${{ secrets.HEROKU_APP_NAME }} # Nome do app Heroku
+          heroku_email: seu-email@exemplo.com # Substitua pelo seu e-mail Heroku
+
+      # Deploy para o Heroku
+      - name: Deploy to Heroku
+        run: |
+          git remote add heroku https://git.heroku.com/${{ secrets.HEROKU_APP_NAME }}.git
+          git push heroku main
